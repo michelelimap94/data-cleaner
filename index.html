@@ -161,6 +161,8 @@ td.changed{color:var(--green);font-weight:500}
         <button class="toggle-btn active" data-key="telefone">📞 Telefone</button>
         <button class="toggle-btn active" data-key="cep">📍 CEP</button>
         <button class="toggle-btn active" data-key="cpfcnpj">🪪 CPF/CNPJ</button>
+        <button class="toggle-btn active" data-key="email">📧 E-mail</button>
+        <button class="toggle-btn active" data-key="estado">🗺️ Estado (UF)</button>
         <button class="toggle-btn active" data-key="colDuplicada">🔁 Colunas duplicadas</button>
         <button class="toggle-btn active" data-key="outliers">📈 Outliers de idade</button>
       </div>
@@ -207,12 +209,13 @@ let rawSheets = {}, cleanSheets = {}, activeSheet = '', fileObj = null;
 let stats = {
   datas:0, precos:0, textos:0, duplicatas:0, vazias:0, cabecalhos:0,
   nulos:0, espacos:0, maiusculas:0, caracteres:0, telefones:0, ceps:0,
-  cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0
+  cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0, emails:0, estados:0,
+  invalidos:0
 };
 const opts = {
   datas:true, precos:true, textos:true, duplicatas:true, vazias:true, cabecalho:true,
   nulos:true, espacos:true, maiusculas:true, caracteres:true, telefone:true, cep:true,
-  cpfcnpj:true, colDuplicada:true, outliers:true
+  cpfcnpj:true, colDuplicada:true, outliers:true, email:true, estado:true
 };
 
 // Toggle buttons
@@ -250,7 +253,27 @@ function formatarMoedaBR(num) {
 
 // ── Limpeza de datas ─────────────────────────────────────
 // Aceita: objeto Date nativo (Excel), número serial do Excel, ou texto em
-// vários formatos (com/sem hora, dia/mês com 1 ou 2 dígitos).
+// vários formatos (com/sem hora, dia/mês com 1 ou 2 dígitos, ano com 2 ou
+// 4 dígitos). Valida se a data faz sentido (dia 1-31, mês 1-12, e dia
+// existe de fato no mês/ano em questão) — caso contrário retorna o aviso
+// de inválida em vez de devolver o texto bagunçado original.
+const MARCA_DATA_INVALIDA = 'Data inválida';
+
+function anoCompleto(a) {
+  a = Number(a);
+  if (a < 100) return a + (a <= 49 ? 2000 : 1900); // 25 -> 2025, 99 -> 1999
+  return a;
+}
+
+// Confere se dia/mês/ano formam uma data real (rejeita 31/02, 40/13 etc.)
+function dataValida(dia, mes, ano) {
+  dia = Number(dia); mes = Number(mes); ano = Number(ano);
+  if (mes < 1 || mes > 12) return false;
+  if (dia < 1 || dia > 31) return false;
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  return dia <= diasNoMes;
+}
+
 function limparData(val) {
   if (val instanceof Date && !isNaN(val)) return formatarDataBR(val);
 
@@ -259,11 +282,44 @@ function limparData(val) {
   s = s.split(/[ T]/)[0]; // remove hora, se houver (ex: "2026-06-01 14:32:00")
 
   let m;
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);  if (m) return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
-  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);     if (m) return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
-  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);   if (m) return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
-  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);     if (m) return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
-  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);            if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  // DD/MM/AAAA ou DD/MM/AA
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    const ano = anoCompleto(m[3]);
+    if (!dataValida(m[1], m[2], ano)) return MARCA_DATA_INVALIDA;
+    return `${pad2(m[1])}/${pad2(m[2])}/${ano}`;
+  }
+  // AAAA-MM-DD
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    if (!dataValida(m[3], m[2], m[1])) return MARCA_DATA_INVALIDA;
+    return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
+  }
+  // AAAA/MM/DD
+  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) {
+    if (!dataValida(m[3], m[2], m[1])) return MARCA_DATA_INVALIDA;
+    return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
+  }
+  // DD-MM-AAAA
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) {
+    if (!dataValida(m[1], m[2], m[3])) return MARCA_DATA_INVALIDA;
+    return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
+  }
+  // DD.MM.AAAA ou DD.MM.AA
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (m) {
+    const ano = anoCompleto(m[3]);
+    if (!dataValida(m[1], m[2], ano)) return MARCA_DATA_INVALIDA;
+    return `${pad2(m[1])}/${pad2(m[2])}/${ano}`;
+  }
+  // AAAAMMDD
+  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) {
+    if (!dataValida(m[3], m[2], m[1])) return MARCA_DATA_INVALIDA;
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
 
   // número serial de data do Excel (ex.: 45810) vindo como texto
   if (/^\d{4,6}(\.\d+)?$/.test(s)) {
@@ -273,7 +329,8 @@ function limparData(val) {
       if (!isNaN(d)) return formatarDataBR(d);
     }
   }
-  return val == null ? '' : String(val);
+  // Texto que não bate com nenhum formato de data conhecido
+  return MARCA_DATA_INVALIDA;
 }
 
 // ── Limpeza de preços ─────────────────────────────────────
@@ -353,7 +410,10 @@ function limparCaracteresEspeciais(s) {
 
 // ── Telefone ─────────────────────────────────────────────────
 // Extrai só os dígitos e formata como celular (XX) XXXXX-XXXX ou
-// fixo (XX) XXXX-XXXX. Aceita com ou sem DDI 55.
+// fixo (XX) XXXX-XXXX. Aceita com ou sem DDI 55. Se não sobrar uma
+// quantidade de dígitos compatível com telefone brasileiro, marca como
+// inválido em vez de manter o texto bagunçado original.
+const MARCA_TELEFONE_INVALIDO = 'Telefone inválido';
 function limparTelefone(val) {
   let s = String(val == null ? '' : val).trim();
   if (!s) return s;
@@ -361,26 +421,86 @@ function limparTelefone(val) {
   if (digitos.length > 11 && digitos.startsWith('55')) digitos = digitos.slice(2);
   if (digitos.length === 11) return `(${digitos.slice(0,2)}) ${digitos.slice(2,7)}-${digitos.slice(7)}`;
   if (digitos.length === 10) return `(${digitos.slice(0,2)}) ${digitos.slice(2,6)}-${digitos.slice(6)}`;
-  return s; // não bate com padrão conhecido — mantém original
+  return MARCA_TELEFONE_INVALIDO;
 }
 
 // ── CEP ──────────────────────────────────────────────────────
+// CEP brasileiro tem sempre 8 dígitos. Qualquer outra coisa (letras,
+// quantidade errada de números, etc.) é marcada como inválida.
+const MARCA_CEP_INVALIDO = 'CEP inválido';
 function limparCEP(val) {
   let s = String(val == null ? '' : val).trim();
   if (!s) return s;
   const digitos = s.replace(/\D/g,'');
   if (digitos.length === 8) return `${digitos.slice(0,5)}-${digitos.slice(5)}`;
-  return s;
+  return MARCA_CEP_INVALIDO;
 }
 
 // ── CPF / CNPJ ───────────────────────────────────────────────
+// CPF tem 11 dígitos e CNPJ tem 14. Qualquer outra coisa (já vinha como
+// "cpf invalido" na planilha, texto solto, quantidade errada de dígitos)
+// é normalizada para o mesmo aviso de inválido.
+const MARCA_DOC_INVALIDO = 'CPF/CNPJ inválido';
 function limparCpfCnpj(val) {
   let s = String(val == null ? '' : val).trim();
   if (!s) return s;
   const digitos = s.replace(/\D/g,'');
   if (digitos.length === 11) return `${digitos.slice(0,3)}.${digitos.slice(3,6)}.${digitos.slice(6,9)}-${digitos.slice(9)}`;
   if (digitos.length === 14) return `${digitos.slice(0,2)}.${digitos.slice(2,5)}.${digitos.slice(5,8)}/${digitos.slice(8,12)}-${digitos.slice(12)}`;
-  return s;
+  return MARCA_DOC_INVALIDO;
+}
+
+// ── E-mail ───────────────────────────────────────────────────
+// Nunca remove o "@" — ele é justamente o que confirma que é um e-mail.
+// Corrige sujeira comum (espaços, maiúsculas, "arroba" escrito por
+// extenso, domínio colado sem @ tipo "joaogmail.com") e, se mesmo assim
+// não formar um endereço válido (usuario@dominio.tld), marca como
+// inválido em vez de inventar ou apagar o @.
+const MARCA_EMAIL_INVALIDO = 'E-mail inválido';
+const DOMINIOS_COMUNS = ['gmail.com','outlook.com','hotmail.com','yahoo.com','icloud.com','live.com','uol.com.br','bol.com.br','terra.com.br'];
+
+function limparEmail(val) {
+  let s = String(val == null ? '' : val).trim().toLowerCase();
+  if (!s) return s;
+  s = s.replace(/\s+/g,'')
+       .replace(/\(arroba\)|\[arroba\]|\{arroba\}/g,'@')
+       .replace(/\(at\)|\[at\]/g,'@');
+
+  // Domínio colado sem @ (ex.: "joaogmail.com", "carlosgmail.com") —
+  // procura um provedor conhecido colado direto no nome do usuário.
+  if (!s.includes('@')) {
+    for (const dom of DOMINIOS_COMUNS) {
+      const prefixo = dom.split('.')[0]; // gmail, outlook, hotmail...
+      const idx = s.indexOf(prefixo);
+      if (idx > 0) { s = s.slice(0, idx) + '@' + s.slice(idx); break; }
+    }
+  }
+
+  // Tem @ mas o domínio ficou incompleto (ex.: "joao@gmail" sem ".com",
+  // ou "maria@" sem nada depois) — completa com o provedor mais provável
+  // quando reconhecível; senão deixa para a validação final marcar inválido.
+  if (s.includes('@')) {
+    const [usuario, dominio] = s.split('@');
+    if (usuario && (!dominio || !dominio.includes('.'))) {
+      const match = DOMINIOS_COMUNS.find(d => dominio && d.startsWith(dominio));
+      if (match) s = `${usuario}@${match}`;
+    }
+  }
+
+  const regexEmail = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+  if (regexEmail.test(s)) return s;
+  return MARCA_EMAIL_INVALIDO;
+}
+
+// ── Estado (UF) ──────────────────────────────────────────────
+// Sigla (SP, RJ, MG...) ou nome completo do estado, sempre em maiúsculas.
+// Diferente do título/texto (Title Case), aqui a convenção é sigla
+// totalmente maiúscula — "sp" e "Sp" devem virar "SP".
+const SIGLAS_UF = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+function limparEstado(val) {
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  return s.toUpperCase();
 }
 
 // ── Detectar tipo de coluna ───────────────────────────────
@@ -392,6 +512,8 @@ const COL_CEP      = ['cep','codigo_postal','zipcode','zip_code'];
 const COL_CPF      = ['cpf'];
 const COL_CNPJ     = ['cnpj'];
 const COL_IDADE    = ['idade','age'];
+const COL_EMAIL    = ['email','e-mail','mail'];
+const COL_ESTADO   = ['estado','uf','sigla_uf'];
 
 function tipoColuna(col) {
   const c = col.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -402,6 +524,8 @@ function tipoColuna(col) {
   if (COL_CNPJ.some(x => c.includes(x)))     return 'cnpj';
   if (COL_CPF.some(x => c.includes(x)))      return 'cpf';
   if (COL_IDADE.some(x => c.includes(x)))    return 'idade';
+  if (COL_EMAIL.some(x => c.includes(x)))    return 'email';
+  if (COL_ESTADO.some(x => c.includes(x)))   return 'estado';
   if (COL_TEXT.some(x => c.includes(x)))     return 'texto';
   return null;
 }
@@ -473,7 +597,8 @@ function limparDados(sheets) {
   stats = {
     datas:0, precos:0, textos:0, duplicatas:0, vazias:0, cabecalhos:0,
     nulos:0, espacos:0, maiusculas:0, caracteres:0, telefones:0, ceps:0,
-    cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0
+    cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0, emails:0, estados:0,
+    invalidos:0
   };
   const result = {};
 
@@ -542,7 +667,8 @@ function limparDados(sheets) {
 
         if (opts.datas && tipo === 'data') {
           const corr = limparData(v);
-          if (String(corr) !== original && original.trim() !== '') stats.datas++;
+          if (corr === MARCA_DATA_INVALIDA && original.trim() !== '') stats.invalidos++;
+          else if (String(corr) !== original && original.trim() !== '') stats.datas++;
           novo[col] = corr;
         } else if (opts.precos && tipo === 'preco') {
           const corr = limparPreco(v);
@@ -550,19 +676,32 @@ function limparDados(sheets) {
           novo[col] = corr;
         } else if (opts.telefone && tipo === 'telefone') {
           const corr = limparTelefone(v);
-          if (corr !== original && original.trim() !== '') stats.telefones++;
+          if (corr === MARCA_TELEFONE_INVALIDO && original.trim() !== '') stats.invalidos++;
+          else if (corr !== original && original.trim() !== '') stats.telefones++;
           novo[col] = corr;
         } else if (opts.cep && tipo === 'cep') {
           const corr = limparCEP(v);
-          if (corr !== original && original.trim() !== '') stats.ceps++;
+          if (corr === MARCA_CEP_INVALIDO && original.trim() !== '') stats.invalidos++;
+          else if (corr !== original && original.trim() !== '') stats.ceps++;
           novo[col] = corr;
         } else if (opts.cpfcnpj && tipo === 'cpf') {
           const corr = limparCpfCnpj(v);
-          if (corr !== original && original.trim() !== '') stats.cpfs++;
+          if (corr === MARCA_DOC_INVALIDO && original.trim() !== '') stats.invalidos++;
+          else if (corr !== original && original.trim() !== '') stats.cpfs++;
           novo[col] = corr;
         } else if (opts.cpfcnpj && tipo === 'cnpj') {
           const corr = limparCpfCnpj(v);
-          if (corr !== original && original.trim() !== '') stats.cnpjs++;
+          if (corr === MARCA_DOC_INVALIDO && original.trim() !== '') stats.invalidos++;
+          else if (corr !== original && original.trim() !== '') stats.cnpjs++;
+          novo[col] = corr;
+        } else if (opts.email && tipo === 'email') {
+          const corr = limparEmail(v);
+          if (corr === MARCA_EMAIL_INVALIDO && original.trim() !== '') stats.invalidos++;
+          else if (corr !== original.trim().toLowerCase() && original.trim() !== '') stats.emails++;
+          novo[col] = corr;
+        } else if (opts.estado && tipo === 'estado') {
+          const corr = limparEstado(v);
+          if (corr !== original && original.trim() !== '') stats.estados++;
           novo[col] = corr;
         } else if (opts.textos && tipo === 'texto') {
           let base = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
@@ -753,8 +892,11 @@ function renderResultados() {
     <div class="stat-card"><div class="label">CEPs padronizados</div><div class="value yellow">${stats.ceps}</div></div>
     <div class="stat-card"><div class="label">CPFs padronizados</div><div class="value yellow">${stats.cpfs}</div></div>
     <div class="stat-card"><div class="label">CNPJs padronizados</div><div class="value yellow">${stats.cnpjs}</div></div>
+    <div class="stat-card"><div class="label">E-mails padronizados</div><div class="value yellow">${stats.emails}</div></div>
+    <div class="stat-card"><div class="label">Estados (UF) padronizados</div><div class="value green">${stats.estados}</div></div>
     <div class="stat-card"><div class="label">Outliers de idade</div><div class="value ${stats.outliersIdade>0?'yellow':'green'}">${stats.outliersIdade}</div></div>
     <div class="stat-card"><div class="label">Colunas duplicadas</div><div class="value ${stats.colunasDuplicadas.length>0?'yellow':'green'}">${stats.colunasDuplicadas.length}</div></div>
+    <div class="stat-card"><div class="label">Campos inválidos sinalizados</div><div class="value ${stats.invalidos>0?'yellow':'green'}">${stats.invalidos}</div></div>
   `;
 
   const acoes = [];
@@ -770,6 +912,10 @@ function renderResultados() {
     acoes.push({tipo:'formatted', desc:`${stats.cpfs} CPFs padronizados no formato XXX.XXX.XXX-XX.`});
   if (stats.cnpjs > 0)
     acoes.push({tipo:'formatted', desc:`${stats.cnpjs} CNPJs padronizados no formato XX.XXX.XXX/XXXX-XX.`});
+  if (stats.emails > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.emails} e-mails padronizados/corrigidos (minúsculas, domínio com @ correto — ex: usuario@gmail.com).`});
+  if (stats.estados > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.estados} estados (UF) padronizados em letras maiúsculas (ex.: sp → SP).`});
   if (stats.nulos > 0)
     acoes.push({tipo:'fixed', desc:`${stats.nulos} valores nulos disfarçados (null, N/A, "-", etc.) convertidos para vazio.`});
   if (stats.espacos > 0)
@@ -790,6 +936,8 @@ function renderResultados() {
     acoes.push({tipo:'warning', desc:`Possíveis colunas duplicadas (mesmo conteúdo em todas as linhas): ${stats.colunasDuplicadas.map(p=>p.join(' ↔ ')).join('; ')}. Revise se vale manter as duas.`});
   if (stats.outliersIdade > 0)
     acoes.push({tipo:'warning', desc:`${stats.outliersIdade} valor(es) de idade fora da faixa plausível (0–110 anos) — possível erro de digitação. Não foram alterados automaticamente, revise manualmente.`});
+  if (stats.invalidos > 0)
+    acoes.push({tipo:'warning', desc:`${stats.invalidos} campo(s) (telefone, CEP, CPF/CNPJ, data ou e-mail) não bateram com nenhum formato válido e foram marcados como inválidos em vez de mantidos bagunçados.`});
   if (acoes.length === 0)
     acoes.push({tipo:'fixed', desc:'Nenhuma correção necessária — dados já estavam limpos!'});
 
