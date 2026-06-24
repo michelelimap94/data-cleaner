@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Limpeza de Dados</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#141720;--surface2:#1c2030;--border:#252a3a;
+  --accent:#4f6ef7;--accent2:#7c3aed;--green:#10b981;--yellow:#f59e0b;
+  --red:#ef4444;--text:#e2e8f0;--muted:#64748b;
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+header{padding:24px 40px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px}
+.logo-pill{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:11px;font-weight:700;letter-spacing:.12em;padding:4px 10px;border-radius:100px;text-transform:uppercase}
+header h1{font-size:17px;font-weight:600}
+header span{font-size:12px;color:var(--muted);margin-left:auto}
+main{flex:1;padding:32px 40px;max-width:1200px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--border);border-radius:16px;padding:52px 40px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(79,110,247,.05)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-icon{font-size:40px;margin-bottom:14px}
+.upload-zone h2{font-size:18px;font-weight:600;margin-bottom:8px}
+.upload-zone p{font-size:13px;color:var(--muted)}
+.file-types{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.file-badge{font-size:11px;font-family:'JetBrains Mono',monospace;padding:3px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
+
+/* FILE BANNER */
+.file-banner{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;display:none;align-items:center;gap:14px}
+.file-banner.show{display:flex}
+.file-icon{width:38px;height:38px;background:var(--surface2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.file-info{flex:1}
+.file-name{font-size:14px;font-weight:500}
+.file-meta{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* SETTINGS */
+.settings-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.setting-group{display:flex;flex-direction:column;gap:6px}
+.setting-group label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.toggle-group{display:flex;gap:8px;flex-wrap:wrap}
+.toggle-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.toggle-btn.active{border-color:var(--accent);background:rgba(79,110,247,.12);color:var(--accent)}
+.btn-run{margin-left:auto;padding:10px 28px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:14px;font-weight:600;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.btn-run:hover{opacity:.88}
+.btn-run:disabled{opacity:.4;cursor:not-allowed}
+
+/* PROGRESS */
+.progress-area{display:none}
+.progress-area.show{display:block}
+.progress-bar-wrap{background:var(--surface2);border-radius:100px;height:6px;overflow:hidden}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .4s;border-radius:100px}
+.progress-steps{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.step-chip{font-size:12px;padding:5px 12px;border-radius:100px;background:var(--surface);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;gap:6px}
+.step-chip.active{border-color:var(--accent);color:var(--accent);background:rgba(79,110,247,.08)}
+.step-chip.done{border-color:var(--green);color:var(--green);background:rgba(16,185,129,.08)}
+
+/* RESULTS */
+.results-area{display:none}
+.results-area.show{display:flex;flex-direction:column;gap:22px}
+.cards-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.stat-card .label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.07em}
+.stat-card .value{font-size:26px;font-weight:700;margin-top:6px;font-family:'JetBrains Mono',monospace}
+.stat-card .value.green{color:var(--green)}
+.stat-card .value.yellow{color:var(--yellow)}
+.stat-card .value.blue{color:var(--accent)}
+
+/* SUMMARY */
+.summary-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px}
+.summary-box h3{font-size:14px;font-weight:600;margin-bottom:14px}
+.summary-list{display:flex;flex-direction:column;gap:8px}
+.summary-item{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5;padding:10px 14px;border-radius:8px;background:var(--surface2)}
+.tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;margin-top:1px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.tag.removed{background:rgba(239,68,68,.15);color:var(--red)}
+.tag.fixed{background:rgba(16,185,129,.15);color:var(--green)}
+.tag.renamed{background:rgba(79,110,247,.15);color:var(--accent)}
+.tag.formatted{background:rgba(245,158,11,.15);color:var(--yellow)}
+.tag.warning{background:rgba(239,68,68,.12);color:#fca5a5}
+
+/* TABLE */
+.table-section{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.table-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.table-header h3{font-size:14px;font-weight:600}
+.sheet-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.sheet-tab{font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s}
+.sheet-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.table-wrap{overflow-x:auto;max-height:420px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:var(--surface2);padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--border);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface2)}
+td.changed{color:var(--green);font-weight:500}
+
+/* DOWNLOAD */
+.download-bar{display:flex;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 22px;align-items:center}
+.download-bar p{font-size:13px;color:var(--muted);flex:1}
+.btn-download{padding:10px 22px;border-radius:10px;border:1px solid var(--green);background:rgba(16,185,129,.1);color:var(--green);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .15s}
+.btn-download:hover{background:rgba(16,185,129,.2)}
+
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:640px){
+  main{padding:20px 16px}
+  header{padding:16px}
+  .settings-row{flex-direction:column}
+  .btn-run{margin-left:0;width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-pill">DADOS</div>
+  <h1>Limpeza Inteligente de Dados</h1>
+  <span>100% local — sem internet necessária</span>
+</header>
+
+<main>
+
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv"/>
+    <div class="upload-icon">📊</div>
+    <h2>Arraste seu arquivo aqui</h2>
+    <p>ou clique para selecionar</p>
+    <div class="file-types">
+      <span class="file-badge">.xlsx</span>
+      <span class="file-badge">.xls</span>
+      <span class="file-badge">.csv</span>
+    </div>
+  </div>
+
+  <div class="file-banner" id="fileBanner">
+    <div class="file-icon">📄</div>
+    <div class="file-info">
+      <div class="file-name" id="fileName">—</div>
+      <div class="file-meta" id="fileMeta">—</div>
+    </div>
+  </div>
+
+  <div class="settings-row" id="settingsRow" style="display:none">
+    <div class="setting-group">
+      <label>O que limpar</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" data-key="datas">🗓️ Datas</button>
+        <button class="toggle-btn active" data-key="precos">💰 Preços</button>
+        <button class="toggle-btn active" data-key="textos">🔤 Textos</button>
+        <button class="toggle-btn active" data-key="duplicatas">🗑️ Duplicatas</button>
+        <button class="toggle-btn active" data-key="vazias">⬜ Linhas vazias</button>
+        <button class="toggle-btn active" data-key="cabecalho">📋 Cabeçalhos</button>
+        <button class="toggle-btn active" data-key="nulos">🚫 Valores nulos</button>
+        <button class="toggle-btn active" data-key="espacos">␣ Espaços extras</button>
+        <button class="toggle-btn active" data-key="maiusculas">Aa Maiús./minús.</button>
+        <button class="toggle-btn active" data-key="caracteres">✂️ Caracteres especiais</button>
+        <button class="toggle-btn active" data-key="telefone">📞 Telefone</button>
+        <button class="toggle-btn active" data-key="cep">📍 CEP</button>
+        <button class="toggle-btn active" data-key="cpfcnpj">🪪 CPF/CNPJ</button>
+        <button class="toggle-btn active" data-key="colDuplicada">🔁 Colunas duplicadas</button>
+        <button class="toggle-btn active" data-key="outliers">📈 Outliers de idade</button>
+      </div>
+    </div>
+    <button class="btn-run" id="btnRun">✨ Limpar dados</button>
+  </div>
+
+  <div class="progress-area" id="progressArea">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="progress-steps">
+      <div class="step-chip" id="step1">📥 Lendo arquivo</div>
+      <div class="step-chip" id="step2">🧹 Padronizando valores</div>
+      <div class="step-chip" id="step3">🪪 Documentos e contatos</div>
+      <div class="step-chip" id="step4">🔍 Duplicatas e outliers</div>
+      <div class="step-chip" id="step5">✅ Pronto</div>
+    </div>
+  </div>
+
+  <div class="results-area" id="resultsArea">
+    <div class="cards-row" id="statsCards"></div>
+    <div class="summary-box">
+      <h3>📋 Relatório de limpeza</h3>
+      <div class="summary-list" id="summaryList"></div>
+    </div>
+    <div class="table-section">
+      <div class="table-header">
+        <h3>📊 Dados tratados</h3>
+        <div class="sheet-tabs" id="sheetTabs"></div>
+      </div>
+      <div class="table-wrap">
+        <table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
+      </div>
+    </div>
+    <div class="download-bar">
+      <p>Arquivo limpo pronto para uso</p>
+      <button class="btn-download" id="btnDownload">⬇️ Baixar Excel limpo</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let rawSheets = {}, cleanSheets = {}, activeSheet = '', fileObj = null;
+let stats = {
+  datas:0, precos:0, textos:0, duplicatas:0, vazias:0, cabecalhos:0,
+  nulos:0, espacos:0, maiusculas:0, caracteres:0, telefones:0, ceps:0,
+  cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0
+};
+const opts = {
+  datas:true, precos:true, textos:true, duplicatas:true, vazias:true, cabecalho:true,
+  nulos:true, espacos:true, maiusculas:true, caracteres:true, telefone:true, cep:true,
+  cpfcnpj:true, colDuplicada:true, outliers:true
+};
+
+// Toggle buttons
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const k = btn.dataset.key;
+    opts[k] = !opts[k];
+    btn.classList.toggle('active', opts[k]);
+  });
+});
+
+// Upload
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag'); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  fileObj = file;
+  document.getElementById('fileBanner').classList.add('show');
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileMeta').textContent = `${(file.size/1024).toFixed(1)} KB`;
+  document.getElementById('settingsRow').style.display = 'flex';
+  document.getElementById('resultsArea').classList.remove('show');
+}
+
+// ── Helpers de formatação ──────────────────────────────────
+function pad2(n) { return String(n).padStart(2,'0'); }
+function formatarDataBR(d) { return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; }
+function formatarMoedaBR(num) {
+  return 'R$ ' + num.toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+}
+
+// ── Limpeza de datas ─────────────────────────────────────
+// Aceita: objeto Date nativo (Excel), número serial do Excel, ou texto em
+// vários formatos (com/sem hora, dia/mês com 1 ou 2 dígitos).
+function limparData(val) {
+  if (val instanceof Date && !isNaN(val)) return formatarDataBR(val);
+
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  s = s.split(/[ T]/)[0]; // remove hora, se houver (ex: "2026-06-01 14:32:00")
+
+  let m;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);  if (m) return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);     if (m) return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
+  m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);   if (m) return `${pad2(m[3])}/${pad2(m[2])}/${m[1]}`;
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);     if (m) return `${pad2(m[1])}/${pad2(m[2])}/${m[3]}`;
+  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);            if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+
+  // número serial de data do Excel (ex.: 45810) vindo como texto
+  if (/^\d{4,6}(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n > 20000 && n < 60000) {
+      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+      if (!isNaN(d)) return formatarDataBR(d);
+    }
+  }
+  return val == null ? '' : String(val);
+}
+
+// ── Limpeza de preços ─────────────────────────────────────
+// Aceita número nativo do Excel ou texto em formato BR (1.234,56) ou US (1,234.56)
+function limparPreco(val) {
+  if (typeof val === 'number' && !isNaN(val)) return formatarMoedaBR(val);
+
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  s = s.replace(/R\$\s?/i, '').replace(/\s/g, '');
+  if (!s) return s;
+
+  const temVirgula = s.includes(',');
+  const temPonto = s.includes('.');
+  let num;
+  if (temVirgula && temPonto) {
+    // padrão BR: ponto = milhar, vírgula = decimal
+    num = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  } else if (temVirgula) {
+    num = parseFloat(s.replace(',', '.'));
+  } else {
+    num = parseFloat(s);
+  }
+  if (isNaN(num)) return val == null ? '' : String(val);
+  return formatarMoedaBR(num);
+}
+
+// ── Capitalização ─────────────────────────────────────────
+// Capitaliza cada palavra (Title Case), não só a primeira letra da frase —
+// importante para valores como "META ADS" / "google ads" -> "Meta Ads".
+function titleCase(val) {
+  val = String(val).trim();
+  if (!val) return val;
+  return val.split(' ').filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+// ── Valores nulos ──────────────────────────────────────────
+// Variações comuns que representam "vazio" mas não são strings vazias:
+// null, NULL, n/a, N/A, NA, undefined, -, --, none, nenhum, etc.
+const PADROES_NULOS = [
+  'null','nulo','undefined','n/a','na','n.a.','#n/a','none','nenhum',
+  '-','--','---','?','??','...', 'sem informacao','sem informação',
+  'nao informado','não informado','indisponivel','indisponível'
+];
+function ehValorNulo(s) {
+  const c = s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return PADROES_NULOS.includes(c);
+}
+function limparNulo(val) {
+  const s = String(val == null ? '' : val).trim();
+  if (s === '') return '';
+  return ehValorNulo(s) ? '' : s;
+}
+
+// ── Espaços extras ──────────────────────────────────────────
+// Remove espaços nas pontas e colapsa espaços múltiplos/tabs no meio do texto.
+function limparEspacos(s) {
+  return String(s == null ? '' : s).replace(/[ \t]+/g,' ').trim();
+}
+
+// ── Caracteres especiais ────────────────────────────────────
+// Remove caracteres que normalmente são sujeira de exportação/copy-paste
+// (ex.: *, #, @, emojis, aspas tipográficas) mantendo acentos, letras,
+// números e pontuação básica (. , - / ( )) que tem significado em nomes,
+// endereços e textos livres.
+function limparCaracteresEspeciais(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u200B-\u200D\uFEFF]/g,'')           // espaços invisíveis
+    .replace(/["'""'']/g,'')                          // aspas tipográficas
+    .replace(/[*#@~^`|<>{}[\]\\]/g,'')                // símbolos de sujeira
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'') // emojis
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+// ── Telefone ─────────────────────────────────────────────────
+// Extrai só os dígitos e formata como celular (XX) XXXXX-XXXX ou
+// fixo (XX) XXXX-XXXX. Aceita com ou sem DDI 55.
+function limparTelefone(val) {
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  let digitos = s.replace(/\D/g,'');
+  if (digitos.length > 11 && digitos.startsWith('55')) digitos = digitos.slice(2);
+  if (digitos.length === 11) return `(${digitos.slice(0,2)}) ${digitos.slice(2,7)}-${digitos.slice(7)}`;
+  if (digitos.length === 10) return `(${digitos.slice(0,2)}) ${digitos.slice(2,6)}-${digitos.slice(6)}`;
+  return s; // não bate com padrão conhecido — mantém original
+}
+
+// ── CEP ──────────────────────────────────────────────────────
+function limparCEP(val) {
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  const digitos = s.replace(/\D/g,'');
+  if (digitos.length === 8) return `${digitos.slice(0,5)}-${digitos.slice(5)}`;
+  return s;
+}
+
+// ── CPF / CNPJ ───────────────────────────────────────────────
+function limparCpfCnpj(val) {
+  let s = String(val == null ? '' : val).trim();
+  if (!s) return s;
+  const digitos = s.replace(/\D/g,'');
+  if (digitos.length === 11) return `${digitos.slice(0,3)}.${digitos.slice(3,6)}.${digitos.slice(6,9)}-${digitos.slice(9)}`;
+  if (digitos.length === 14) return `${digitos.slice(0,2)}.${digitos.slice(2,5)}.${digitos.slice(5,8)}/${digitos.slice(8,12)}-${digitos.slice(12)}`;
+  return s;
+}
+
+// ── Detectar tipo de coluna ───────────────────────────────
+const COL_DATA     = ['data','date','dia','dt_','periodo','competencia'];
+const COL_PRECO    = ['preco','valor','total','receita','ticket','price','custo','desconto','faturamento','gmv','margem','comissao','frete','imposto'];
+const COL_TEXT     = ['status','pagamento','categoria','origem','canal','tipo','forma','metodo','situacao','etapa'];
+const COL_TELEFONE = ['telefone','celular','fone','whatsapp','contato','phone','tel_','ddd'];
+const COL_CEP      = ['cep','codigo_postal','zipcode','zip_code'];
+const COL_CPF      = ['cpf'];
+const COL_CNPJ     = ['cnpj'];
+const COL_IDADE    = ['idade','age'];
+
+function tipoColuna(col) {
+  const c = col.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if (COL_DATA.some(x => c.includes(x)))     return 'data';
+  if (COL_PRECO.some(x => c.includes(x)))    return 'preco';
+  if (COL_TELEFONE.some(x => c.includes(x))) return 'telefone';
+  if (COL_CEP.some(x => c.includes(x)))      return 'cep';
+  if (COL_CNPJ.some(x => c.includes(x)))     return 'cnpj';
+  if (COL_CPF.some(x => c.includes(x)))      return 'cpf';
+  if (COL_IDADE.some(x => c.includes(x)))    return 'idade';
+  if (COL_TEXT.some(x => c.includes(x)))     return 'texto';
+  return null;
+}
+
+// Quando o nome da coluna não bate com nenhuma palavra-chave conhecida,
+// tenta inferir se é uma coluna de DATA olhando uma amostra dos valores
+// reais (cobre nomes de coluna incomuns/abreviados). Não fazemos o mesmo
+// para "preço": qualquer coluna numérica (ID de cliente, quantidade,
+// cliques, minutos no site etc.) bateria com um padrão de número e seria
+// convertida em dinheiro por engano — por isso preço só é detectado pelo
+// nome da coluna (lista COL_PRECO acima), nunca pelo conteúdo.
+function inferirTipoPorConteudo(valores) {
+  const amostra = valores.filter(v => String(v == null ? '' : v).trim() !== '').slice(0, 30);
+  if (!amostra.length) return null;
+
+  const dataRe = /^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}|^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}/;
+  const dateLike = amostra.filter(v => v instanceof Date || dataRe.test(String(v).trim())).length;
+  if (dateLike / amostra.length >= 0.7) return 'data';
+
+  return null;
+}
+
+// ── Limpar cabeçalho ──────────────────────────────────────
+function limparCabecalho(k) {
+  return k.trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase()
+    .replace(/\s+/g,'_')
+    .replace(/[^\w]/g,'');
+}
+
+// ── Colunas duplicadas ──────────────────────────────────────
+// Duas situações distintas:
+// 1) Mesmo nome de coluna repetido (já tratado por montarCabecalhos, mas
+//    verificamos aqui caso o nome original original bata após normalizar).
+// 2) Colunas com nomes diferentes mas conteúdo idêntico em todas as linhas
+//    (ex.: "Telefone" e "Telefone_Contato" exportadas duas vezes).
+function detectarColunasDuplicadas(dados, cols) {
+  const duplicadas = [];
+  for (let i = 0; i < cols.length; i++) {
+    for (let j = i + 1; j < cols.length; j++) {
+      const a = cols[i], b = cols[j];
+      let iguais = true;
+      for (let k = 0; k < dados.length; k++) {
+        const va = String(dados[k][a] == null ? '' : dados[k][a]).trim();
+        const vb = String(dados[k][b] == null ? '' : dados[k][b]).trim();
+        if (va !== vb) { iguais = false; break; }
+      }
+      if (iguais) duplicadas.push([a, b]);
+    }
+  }
+  return duplicadas;
+}
+
+// ── Outliers de idade ────────────────────────────────────────
+// Marca como outlier idades fora de uma faixa humanamente plausível
+// (0 a 110 anos). Não remove a linha — só identifica para revisão manual,
+// já que pode ser erro de digitação (ex.: 250) ou coluna mal mapeada.
+function ehOutlierIdade(val) {
+  const s = String(val == null ? '' : val).trim();
+  if (s === '') return false;
+  const n = Number(s.replace(',', '.'));
+  if (isNaN(n)) return false;
+  return n < 0 || n > 110;
+}
+
+// ── Limpeza principal ─────────────────────────────────────
+function limparDados(sheets) {
+  stats = {
+    datas:0, precos:0, textos:0, duplicatas:0, vazias:0, cabecalhos:0,
+    nulos:0, espacos:0, maiusculas:0, caracteres:0, telefones:0, ceps:0,
+    cpfs:0, cnpjs:0, colunasDuplicadas:[], outliersIdade:0
+  };
+  const result = {};
+
+  for (const [nome, linhasOriginais] of Object.entries(sheets)) {
+    let dados = linhasOriginais.map(r => ({ ...r }));
+
+    // 1. Remover linhas totalmente vazias
+    if (opts.vazias) {
+      const antes = dados.length;
+      dados = dados.filter(r => Object.values(r).some(v => String(v == null ? '' : v).trim() !== ''));
+      stats.vazias += antes - dados.length;
+    }
+
+    // 2. Remover duplicatas (compara pela versão em texto de cada linha)
+    if (opts.duplicatas) {
+      const antes = dados.length;
+      const seen = new Set();
+      dados = dados.filter(r => {
+        const key = JSON.stringify(Object.fromEntries(Object.entries(r).map(([k,v]) => [k, String(v == null ? '' : v)])));
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+      stats.duplicatas += antes - dados.length;
+    }
+
+    if (!dados.length) { result[nome] = dados; continue; }
+
+    // 3. Mapear colunas por tipo: primeiro pelo nome, e se não bater com
+    //    nenhuma palavra-chave conhecida, infere pelo conteúdo da coluna.
+    const cols = Object.keys(dados[0]);
+    const tipoMap = {};
+    cols.forEach(c => {
+      const valoresColuna = dados.map(r => r[c]);
+      tipoMap[c] = tipoColuna(c) || inferirTipoPorConteudo(valoresColuna);
+    });
+
+    // 3b. Detectar colunas duplicadas (mesmo conteúdo em todas as linhas)
+    if (opts.colDuplicada) {
+      stats.colunasDuplicadas = detectarColunasDuplicadas(dados, cols);
+    }
+
+    // 3c. Detectar outliers de idade (não altera valor, só marca para o relatório)
+    if (opts.outliers) {
+      cols.forEach(c => {
+        if (tipoMap[c] === 'idade') {
+          dados.forEach(r => { if (ehOutlierIdade(r[c])) stats.outliersIdade++; });
+        }
+      });
+    }
+
+    // 4. Transformar valores
+    dados = dados.map(row => {
+      const novo = {};
+      cols.forEach(col => {
+        let v = row[col];
+        const tipo = tipoMap[col];
+        const original = String(v == null ? '' : v);
+
+        // 4a. Valores nulos disfarçados de texto (null, n/a, -, etc.)
+        //     vira string vazia antes de seguir para as outras limpezas.
+        if (opts.nulos && typeof v !== 'number' && !(v instanceof Date)) {
+          const antesNulo = original.trim();
+          v = limparNulo(v);
+          if (antesNulo !== '' && v === '' && antesNulo !== v) stats.nulos++;
+        }
+
+        if (opts.datas && tipo === 'data') {
+          const corr = limparData(v);
+          if (String(corr) !== original && original.trim() !== '') stats.datas++;
+          novo[col] = corr;
+        } else if (opts.precos && tipo === 'preco') {
+          const corr = limparPreco(v);
+          if (String(corr) !== original && original.trim() !== '') stats.precos++;
+          novo[col] = corr;
+        } else if (opts.telefone && tipo === 'telefone') {
+          const corr = limparTelefone(v);
+          if (corr !== original && original.trim() !== '') stats.telefones++;
+          novo[col] = corr;
+        } else if (opts.cep && tipo === 'cep') {
+          const corr = limparCEP(v);
+          if (corr !== original && original.trim() !== '') stats.ceps++;
+          novo[col] = corr;
+        } else if (opts.cpfcnpj && tipo === 'cpf') {
+          const corr = limparCpfCnpj(v);
+          if (corr !== original && original.trim() !== '') stats.cpfs++;
+          novo[col] = corr;
+        } else if (opts.cpfcnpj && tipo === 'cnpj') {
+          const corr = limparCpfCnpj(v);
+          if (corr !== original && original.trim() !== '') stats.cnpjs++;
+          novo[col] = corr;
+        } else if (opts.textos && tipo === 'texto') {
+          let base = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+          if (opts.caracteres) base = limparCaracteresEspeciais(base);
+          const corr = titleCase(base);
+          if (corr !== original && base !== '') stats.textos++;
+          novo[col] = corr;
+        } else if (v instanceof Date) {
+          novo[col] = formatarDataBR(v);
+        } else if (typeof v === 'string') {
+          let s = v;
+          // 4b. Espaços extras (pontas + múltiplos no meio)
+          if (opts.espacos) {
+            const semEspacos = limparEspacos(s);
+            if (semEspacos !== s.trim()) stats.espacos++;
+            s = semEspacos;
+          } else {
+            s = s.trim().replace(/\s+/g, ' ');
+          }
+          // 4c. Caracteres especiais / sujeira de exportação
+          if (opts.caracteres) {
+            const semChars = limparCaracteresEspeciais(s);
+            if (semChars !== s) stats.caracteres++;
+            s = semChars;
+          }
+          // 4d. Padronização de maiúsculas/minúsculas em texto livre
+          //     (Title Case), exceto se já vazio ou puramente numérico.
+          if (opts.maiusculas && s && !/^[\d.,\-\/\s]+$/.test(s)) {
+            const padronizado = titleCase(s);
+            if (padronizado !== s) stats.maiusculas++;
+            s = padronizado;
+          }
+          novo[col] = s;
+        } else {
+          novo[col] = v == null ? '' : v;
+        }
+      });
+      return novo;
+    });
+
+    // 5. Padronizar cabeçalhos
+    if (opts.cabecalho) {
+      const colMap = {};
+      let mudou = false;
+      cols.forEach(k => {
+        const novo = limparCabecalho(k);
+        colMap[k] = novo || k;
+        if (novo !== k) mudou = true;
+      });
+      if (mudou) {
+        stats.cabecalhos++;
+        dados = dados.map(row => {
+          const novo = {};
+          for (const [k,v] of Object.entries(row)) novo[colMap[k]] = v;
+          return novo;
+        });
+      }
+    }
+
+    // 6. Garantir que tudo fica como texto pronto para exibição/exportação
+    dados = dados.map(row => {
+      const novo = {};
+      for (const [k,v] of Object.entries(row)) {
+        novo[k] = v instanceof Date ? formatarDataBR(v) : String(v == null ? '' : v);
+      }
+      return novo;
+    });
+
+    result[nome] = dados;
+  }
+  return result;
+}
+
+// ── Executar limpeza ──────────────────────────────────────
+document.getElementById('btnRun').addEventListener('click', async () => {
+  if (!fileObj) return;
+  const btn = document.getElementById('btnRun');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processando…';
+
+  document.getElementById('progressArea').classList.add('show');
+  document.getElementById('resultsArea').classList.remove('show');
+  ['step1','step2','step3','step4','step5'].forEach(id => document.getElementById(id).className = 'step-chip');
+
+  setStep(1); setProgress(15);
+  rawSheets = await lerExcel(fileObj);
+  await delay(300);
+
+  setStep(2); setProgress(40);
+  await delay(200);
+
+  setStep(3); setProgress(60);
+  cleanSheets = limparDados(rawSheets);
+  await delay(200);
+
+  setStep(4); setProgress(80);
+  await delay(200);
+
+  setStep(5); setProgress(100);
+  await delay(200);
+
+  renderResultados();
+  document.getElementById('progressArea').classList.remove('show');
+  document.getElementById('resultsArea').classList.add('show');
+
+  btn.disabled = false;
+  btn.innerHTML = '✨ Limpar dados';
+});
+
+function lerExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        // raw:true + cellDates:true -> datas viram Date nativo e números
+        // continuam números, em vez de texto pré-formatado pelo Excel
+        // (formato que varia e quebra os regex de limpeza).
+        const wb = XLSX.read(data, { type:'array', cellDates:true, raw:true });
+        const sheets = {};
+        wb.SheetNames.forEach(name => {
+          const matrix = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, defval:'', raw:true });
+          const headerIdx = detectarLinhaCabecalho(matrix);
+          const headers = montarCabecalhos(matrix[headerIdx] || []);
+          const linhas = [];
+          for (let i = headerIdx + 1; i < matrix.length; i++) {
+            const row = matrix[i];
+            if (!row || row.every(c => String(c == null ? '' : c).trim() === '')) continue;
+            const obj = {};
+            headers.forEach((h, idx) => { obj[h] = row[idx] !== undefined ? row[idx] : ''; });
+            linhas.push(obj);
+          }
+          sheets[name] = linhas;
+        });
+        resolve(sheets);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Exportações de sistemas de e-commerce/ERP costumam ter linha(s) de
+// título/filtro antes do cabeçalho real. Procura, nas primeiras linhas,
+// aquela que parece ser o cabeçalho de verdade: tem várias células
+// preenchidas e é seguida por linhas com volume parecido de dados (a
+// tabela em si).
+function detectarLinhaCabecalho(matrix) {
+  const limite = Math.min(matrix.length, 15);
+  for (let i = 0; i < limite; i++) {
+    const row = matrix[i] || [];
+    const preenchidas = row.filter(c => String(c == null ? '' : c).trim() !== '').length;
+    if (preenchidas < 2) continue;
+    const prox1 = (matrix[i+1] || []).filter(c => String(c == null ? '' : c).trim() !== '').length;
+    const prox2 = (matrix[i+2] || []).filter(c => String(c == null ? '' : c).trim() !== '').length;
+    if (prox1 >= preenchidas * 0.5 || prox2 >= preenchidas * 0.5) return i;
+  }
+  return 0; // fallback: primeira linha
+}
+
+// Monta nomes de coluna a partir da linha de cabeçalho, preenchendo
+// células vazias e evitando nomes duplicados.
+function montarCabecalhos(row) {
+  const usados = {};
+  return row.map((v, i) => {
+    let nome = String(v == null ? '' : v).trim();
+    if (!nome) nome = `COLUNA_${i+1}`;
+    if (usados[nome]) { usados[nome]++; nome = `${nome}_${usados[nome]}`; }
+    else usados[nome] = 1;
+    return nome;
+  });
+}
+
+function renderResultados() {
+  const totalBruto  = Object.values(rawSheets).reduce((a,b) => a+b.length, 0);
+  const totalLimpo  = Object.values(cleanSheets).reduce((a,b) => a+b.length, 0);
+
+  document.getElementById('statsCards').innerHTML = `
+    <div class="stat-card"><div class="label">Linhas originais</div><div class="value blue">${totalBruto}</div></div>
+    <div class="stat-card"><div class="label">Linhas limpas</div><div class="value green">${totalLimpo}</div></div>
+    <div class="stat-card"><div class="label">Datas corrigidas</div><div class="value yellow">${stats.datas}</div></div>
+    <div class="stat-card"><div class="label">Preços formatados</div><div class="value yellow">${stats.precos}</div></div>
+    <div class="stat-card"><div class="label">Textos padronizados</div><div class="value green">${stats.textos}</div></div>
+    <div class="stat-card"><div class="label">Duplicatas removidas</div><div class="value green">${stats.duplicatas}</div></div>
+    <div class="stat-card"><div class="label">Valores nulos tratados</div><div class="value yellow">${stats.nulos}</div></div>
+    <div class="stat-card"><div class="label">Espaços extras removidos</div><div class="value green">${stats.espacos}</div></div>
+    <div class="stat-card"><div class="label">Telefones padronizados</div><div class="value yellow">${stats.telefones}</div></div>
+    <div class="stat-card"><div class="label">CEPs padronizados</div><div class="value yellow">${stats.ceps}</div></div>
+    <div class="stat-card"><div class="label">CPFs padronizados</div><div class="value yellow">${stats.cpfs}</div></div>
+    <div class="stat-card"><div class="label">CNPJs padronizados</div><div class="value yellow">${stats.cnpjs}</div></div>
+    <div class="stat-card"><div class="label">Outliers de idade</div><div class="value ${stats.outliersIdade>0?'yellow':'green'}">${stats.outliersIdade}</div></div>
+    <div class="stat-card"><div class="label">Colunas duplicadas</div><div class="value ${stats.colunasDuplicadas.length>0?'yellow':'green'}">${stats.colunasDuplicadas.length}</div></div>
+  `;
+
+  const acoes = [];
+  if (stats.datas > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.datas} datas convertidas para o padrão DD/MM/AAAA (formatos 2026-06-01, 2026/06/01 e outros corrigidos).`});
+  if (stats.precos > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.precos} valores monetários formatados no padrão brasileiro — R$ 1.234,56.`});
+  if (stats.telefones > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.telefones} telefones padronizados no formato (XX) XXXXX-XXXX.`});
+  if (stats.ceps > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.ceps} CEPs padronizados no formato XXXXX-XXX.`});
+  if (stats.cpfs > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.cpfs} CPFs padronizados no formato XXX.XXX.XXX-XX.`});
+  if (stats.cnpjs > 0)
+    acoes.push({tipo:'formatted', desc:`${stats.cnpjs} CNPJs padronizados no formato XX.XXX.XXX/XXXX-XX.`});
+  if (stats.nulos > 0)
+    acoes.push({tipo:'fixed', desc:`${stats.nulos} valores nulos disfarçados (null, N/A, "-", etc.) convertidos para vazio.`});
+  if (stats.espacos > 0)
+    acoes.push({tipo:'fixed', desc:`${stats.espacos} campos com espaços extras nas pontas ou duplicados no meio do texto corrigidos.`});
+  if (stats.caracteres > 0)
+    acoes.push({tipo:'fixed', desc:`${stats.caracteres} campos com caracteres especiais/sujeira (emojis, aspas tipográficas, símbolos) limpos.`});
+  if (stats.maiusculas > 0)
+    acoes.push({tipo:'fixed', desc:`${stats.maiusculas} campos de texto padronizados para o mesmo padrão de maiúsculas/minúsculas (Title Case).`});
+  if (stats.textos > 0)
+    acoes.push({tipo:'fixed', desc:`${stats.textos} campos de texto padronizados (Status, Pagamento, Categoria, Origem).`});
+  if (stats.duplicatas > 0)
+    acoes.push({tipo:'removed', desc:`${stats.duplicatas} linhas duplicadas removidas.`});
+  if (stats.vazias > 0)
+    acoes.push({tipo:'removed', desc:`${stats.vazias} linhas completamente vazias removidas.`});
+  if (stats.cabecalhos > 0)
+    acoes.push({tipo:'renamed', desc:`Cabeçalhos padronizados: acentos removidos, espaços viram _, tudo em maiúsculas.`});
+  if (stats.colunasDuplicadas.length > 0)
+    acoes.push({tipo:'warning', desc:`Possíveis colunas duplicadas (mesmo conteúdo em todas as linhas): ${stats.colunasDuplicadas.map(p=>p.join(' ↔ ')).join('; ')}. Revise se vale manter as duas.`});
+  if (stats.outliersIdade > 0)
+    acoes.push({tipo:'warning', desc:`${stats.outliersIdade} valor(es) de idade fora da faixa plausível (0–110 anos) — possível erro de digitação. Não foram alterados automaticamente, revise manualmente.`});
+  if (acoes.length === 0)
+    acoes.push({tipo:'fixed', desc:'Nenhuma correção necessária — dados já estavam limpos!'});
+
+  document.getElementById('summaryList').innerHTML = acoes.map(a => `
+    <div class="summary-item">
+      <span class="tag ${a.tipo}">${a.tipo.toUpperCase()}</span>
+      <span>${a.desc}</span>
+    </div>`).join('');
+
+  // Abas
+  const nomes = Object.keys(cleanSheets);
+  activeSheet = nomes[0];
+  document.getElementById('sheetTabs').innerHTML = nomes.map(n =>
+    `<button class="sheet-tab ${n===activeSheet?'active':''}" data-sheet="${n}">${n}</button>`
+  ).join('');
+  document.querySelectorAll('.sheet-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeSheet = tab.dataset.sheet;
+      renderTabela(cleanSheets[activeSheet], rawSheets[activeSheet]);
+    });
+  });
+  renderTabela(cleanSheets[activeSheet], rawSheets[activeSheet]);
+}
+
+function renderTabela(rows, rawRows) {
+  if (!rows || !rows.length) {
+    document.getElementById('tableHead').innerHTML = '';
+    document.getElementById('tableBody').innerHTML = '<tr><td style="color:var(--muted);padding:20px">Sem dados</td></tr>';
+    return;
+  }
+  const cols = Object.keys(rows[0]);
+  document.getElementById('tableHead').innerHTML =
+    `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+  document.getElementById('tableBody').innerHTML = rows.slice(0,300).map((row, i) => {
+    const rawRow = rawRows ? rawRows[i] : null;
+    return `<tr>${cols.map(c => {
+      const val = row[c] ?? '';
+      const rawVal = rawRow ? String(rawRow[c] ?? '') : val;
+      const changed = rawVal !== String(val) && rawVal !== '';
+      return `<td class="${changed?'changed':''}" title="${val}">${val}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+}
+
+// Download
+document.getElementById('btnDownload').addEventListener('click', () => {
+  const wb = XLSX.utils.book_new();
+  for (const [nome, rows] of Object.entries(cleanSheets)) {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, nome.slice(0,31));
+  }
+  XLSX.writeFile(wb, 'dados_limpos.xlsx');
+});
+
+function setStep(n) {
+  for(let i=1;i<n;i++) document.getElementById(`step${i}`).className='step-chip done';
+  document.getElementById(`step${n}`).className='step-chip active';
+}
+function setProgress(v) { document.getElementById('progressBar').style.width = v+'%'; }
+function delay(ms) { return new Promise(r => setTimeout(r,ms)); }
+</script>
+</body>
+</html>
