@@ -1,8 +1,10 @@
-# Data Cleaner — Limpeza Inteligente de Dados
+# 📊 Data Cleaner — Limpeza Inteligente de Dados
 
-Aplicativo web desenvolvido para facilitar a **limpeza, padronização e preparação de dados** a partir de arquivos Excel e CSV.
+Aplicativo web para **limpeza, padronização e preparação de dados** a partir de arquivos Excel e CSV.
 
-O projeto foi criado como uma aplicação prática para transformar arquivos com inconsistências em uma base mais organizada e pronta para análise.
+> Uma ferramenta criada para transformar uma etapa operacional e repetitiva em um fluxo mais simples, visual e automatizado.
+
+![Data Cleaner — prévia da interface](assets/data-cleaner-preview.svg)
 
 ## 🎯 Objetivo
 
@@ -50,13 +52,13 @@ Após o processamento, a aplicação apresenta:
 - CSS3
 - JavaScript
 - [SheetJS](https://sheetjs.com/) para leitura e geração de planilhas
-- Google Fonts (Inter e JetBrains Mono)
+- Google Fonts — Inter e JetBrains Mono
 
 ## 💡 O que este projeto demonstra
 
-Este projeto reúne conhecimentos de **desenvolvimento web, manipulação de dados, tratamento de inconsistências e experiência do usuário**, conectando tecnologia com uma necessidade real de análise de dados.
+Este projeto reúne conhecimentos de **desenvolvimento web, manipulação de dados, tratamento de inconsistências e experiência do usuário**, conectando tecnologia com uma necessidade prática de preparação de dados.
 
-A proposta é transformar uma tarefa operacional e repetitiva em um fluxo mais simples, visual e automatizado.
+A aplicação também demonstra a criação de um fluxo completo: **entrada de arquivo → tratamento → validação/visualização → exportação**.
 
 ## 🚀 Como utilizar
 
@@ -70,4 +72,4 @@ A proposta é transformar uma tarefa operacional e repetitiva em um fluxo mais s
 ## 👩‍💻 Autoria
 
 **Michele Lima**  
-Projeto desenvolvido para estudos e portfólio em tecnologia, dados e automação.
+Projeto desenvolvido para estudos e portfólio em **tecnologia, dados e automação**.
